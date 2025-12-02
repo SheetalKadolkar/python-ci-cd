@@ -28,10 +28,9 @@ pipeline {
                     pip install --upgrade pip
                     pip install -r requirements.txt
                     PYTHONPATH=. python test/test.py
-        '''
-    }
-}
-
+                '''
+            }
+        }
 
         /* ---------------- DOCKER BUILD ---------------- */
         stage('Build Docker Image') {
@@ -45,7 +44,6 @@ pipeline {
         stage('Run Docker Container') {
             steps {
                 echo 'Running Docker container...'
-
                 sh '''
                     docker stop ${CONTAINER_NAME} || true
                     docker rm ${CONTAINER_NAME} || true
