@@ -2,48 +2,90 @@ pipeline {
     agent any
 
     environment {
-        SSH_CRED = 'node-app-key'
-        SERVER_IP = '13.203.192.237'
-        REMOTE_USER = 'ubuntu'
-        APP_DIR = '/home/ubuntu/pythonapp'
+        IMAGE_NAME = "sheetalkadolkar/python-ci-cd:${BUILD_ID}"
+        CONTAINER_NAME = "python-app-${BUILD_ID}"
     }
 
     stages {
-        stage('Clone Repo') {
+
+        /* ---------------- PREPARE ---------------- */
+        stage('Prepare') {
             steps {
-                git url: 'https://github.com/sheetalkadolkar/python-app-CICD', branch: 'main'
+                echo 'Checking project files...'
+                sh 'ls -l'
+                sh 'cat app.py'
+                sh 'cat requirements.txt'
             }
         }
 
-        stage('Deploy to Server') {
+        /* ---------------- INSTALL & TEST ---------------- */
+        stage('Install & Run Tests') {
             steps {
-                sshagent(credentials: ["${SSH_CRED}"]) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${SERVER_IP} "mkdir -p ${APP_DIR}"
-                        scp -r Dockerfile README.md app.py requirements.txt test ${REMOTE_USER}@${SERVER_IP}:${APP_DIR}/
-                    '''
-                }
+                echo 'Installing dependencies & running unit tests...'
+                sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    python test.py
+                '''
             }
         }
 
-        stage('Install & Run App') {
+        /* ---------------- DOCKER BUILD ---------------- */
+        stage('Build Docker Image') {
             steps {
-                sshagent(["${SSH_CRED}"]) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${SERVER_IP} '
-                            sudo apt update &&
-                            sudo apt install -y python3-venv python3-pip &&
-                            cd ${APP_DIR} &&
-                            python3 -m venv venv &&
-                            source venv/bin/activate &&
-                            pip install --upgrade pip &&
-                            pip install -r requirements.txt &&
-                            nohup python3 app.py --host=0.0.0.0 > app.log 2>&1 &
-                            exit 0
-                        '
-                    """
-                }
+                echo "Building Docker image..."
+                sh "docker build -t ${IMAGE_NAME} ."
             }
+        }
+
+        /* ---------------- RUN CONTAINER ---------------- */
+        stage('Run Docker Container') {
+            steps {
+                echo 'Running Docker container...'
+
+                sh '''
+                    docker stop ${CONTAINER_NAME} || true
+                    docker rm ${CONTAINER_NAME} || true
+                    docker run -d -p 5000:5000 --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                '''
+            }
+        }
+
+        /* ---------------- TEST APPLICATION ---------------- */
+        stage('Test Application') {
+            steps {
+                echo 'Testing application endpoints...'
+                sh '''
+                    sleep 10
+
+                    echo "Testing / endpoint"
+                    curl -f http://localhost:5000/ || exit 1
+
+                    echo "Testing /hi endpoint"
+                    curl -f http://localhost:5000/hi || exit 1
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up...'
+            sh '''
+                docker stop ${CONTAINER_NAME} || true
+                docker rm ${CONTAINER_NAME} || true
+                docker system prune -f || true
+            '''
+        }
+
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Pipeline failed!'
         }
     }
 }
