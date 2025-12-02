@@ -27,7 +27,8 @@ pipeline {
                     . venv/bin/activate
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    python test.py
+                    python test/test.py
+
                 '''
             }
         }
