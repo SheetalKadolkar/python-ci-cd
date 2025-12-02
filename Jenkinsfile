@@ -27,11 +27,11 @@ pipeline {
                     . venv/bin/activate
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    python test/test.py
+                    PYTHONPATH=. python test/test.py
+        '''
+    }
+}
 
-                '''
-            }
-        }
 
         /* ---------------- DOCKER BUILD ---------------- */
         stage('Build Docker Image') {
